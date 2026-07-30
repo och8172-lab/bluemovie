@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import requests
+import random
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 # 1. 페이지 기본 설정
 st.set_page_config(page_title="박스오피스 대시보드", layout="wide")
-st.title("🎬 어제의 박스오피스 & 영화 역사 대시보드")
+st.title("🎬 박스오피스 종합 올인원 대시보드")
 
 # 2. 비밀 금고에서 인증키 꺼내기
 KOBIS_KEY = st.secrets["KOBIS_KEY"]
@@ -63,9 +64,37 @@ c3.metric("누적 관객수", f"{top['audiAcc']:,}명")
 
 st.write("")
 
-# --- 🍗 [위트 & 팩트] 흥행 수입 실감 변환기 ---
+# --- 🥊 [1] 어제 1위 VS 2위 라이벌 매치 ---
+if len(df) >= 2:
+    st.subheader("🥊 어제 1위 VS 2위 벼랑끝 맞대결")
+    top1 = df.sort_values("rank").iloc[0]
+    top2 = df.sort_values("rank").iloc[1]
+
+    diff_audi = top1["audiCnt"] - top2["audiCnt"]
+    eff1 = top1["audiCnt"] / top1["scrnCnt"] if top1["scrnCnt"] > 0 else 0
+    eff2 = top2["audiCnt"] / top2["scrnCnt"] if top2["scrnCnt"] > 0 else 0
+
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        st.info(f"### 🥇 1위: {top1['movieNm']}\n"
+                f"- 👥 **관객수**: {top1['audiCnt']:,}명\n"
+                f"- 🖥️ **스크린수**: {top1['scrnCnt']:,}개\n"
+                f"- ⚡ **스크린 1개당 관객**: **{eff1:.1f}명**")
+    with col_v2:
+        st.warning(f"### 🥈 2위: {top2['movieNm']}\n"
+                   f"- 👥 **관객수**: {top2['audiCnt']:,}명\n"
+                   f"- 🖥️ **스크린수**: {top2['scrnCnt']:,}개\n"
+                   f"- ⚡ **스크린 1개당 관객**: **{eff2:.1f}명**")
+
+    eff_winner = top1['movieNm'] if eff1 >= eff2 else top2['movieNm']
+    st.success(f"💡 **관객수 격차**: 1위가 2위를 **{diff_audi:,}명** 차이로 앞섰습니다!\n\n"
+               f"🔥 **스크린 가성비(알짜배기 효율) 승자**: **[{eff_winner}]** (스크린 1개당 더 많은 관객을 끌어모음)")
+
+st.markdown("---")
+
+# --- 🍗 [2] 흥행 수입 실감 변환기 ---
 st.subheader("🍗 흥행 수입 실감 변환기 (1위 영화 기준)")
-st.caption("1위 영화의 어제 매출액과 누적 매출액을 실생활 가치로 환산했습니다!")
+st.caption("1위 영화의 매출액을 일상 생활 물가로 체감해 보세요!")
 
 sales_amt = top["salesAmt"]
 sales_acc = top["salesAcc"]
@@ -100,7 +129,20 @@ with col_right:
 
 st.markdown("---")
 
-# --- 🕰️ [감성 추억 여행] 박스오피스 타임머신 ---
+# --- 🎰 [3] 오늘 뭐 보지? TOP 10 영화 랜덤 추천 ---
+st.subheader("🎰 오늘 뭐 보지? TOP 10 영화 랜덤 룰렛")
+st.caption("무슨 영화를 볼지 결정하기 힘들다면 룰렛을 눌러보세요!")
+
+if st.button("🎲 오늘 볼 영화 랜덤 뽑기!"):
+    chosen = random.choice(df.to_dict("records"))
+    st.balloons()
+    st.success(f"🎉 **오늘의 추천 영화**: **[{chosen['rank']}위] {chosen['movieNm']}**")
+    st.write(f"🍿 **정보**: 개봉일 {chosen.get('openDt', '정보없음')} / 누적관객 {chosen['audiAcc']:,}명")
+    st.info("💡 **추천 꿀조합**: 고소한 팝콘 L 사이즈 + 시원한 제로 콜라! (화장실은 미리 다녀오세요 🏃‍♂️)")
+
+st.markdown("---")
+
+# --- 🕰️ [4] 박스오피스 타임머신 ---
 st.subheader("🕰️ 박스오피스 타임머신 (N년 전 오늘은?)")
 st.caption(f"과거의 오늘({yesterday.strftime('%m월 %d일')}) 박스오피스 1위는 어떤 영화였을까요?")
 
@@ -136,11 +178,30 @@ for idx, years_ago in enumerate(years_list):
 
 st.markdown("---")
 
-# --- 🏛️ [역사상 전설] 대한민국 역대 영화 흥행 순위 ---
-st.subheader("🏛️ 대한민국 영화 역사상 역대 흥행 순위 (KOBIS 공식 집계)")
-st.caption("우리나라 영화 상영 역사상 최고 관객 수를 기록한 전설적인 작품들입니다.")
+# --- 💳 [5] 영화 티켓값 변천사 & 추억의 관람료 계산기 ---
+st.subheader("💳 [라떼는 말이야...] 영화 티켓값 변천사 & 관람료 계산기")
+st.caption("시대별 영화 티켓 가격 변천사와 인원수별 예상 금액을 확인해 보세요!")
 
-# KOBIS 공식 집계 기준 역대 통계 데이터
+num_people = st.number_input("👥 관람 인원 수를 입력하세요 (명)", min_value=1, max_value=20, value=2, step=1)
+
+prices = {
+    "2000년대 (6,000원)": 6000,
+    "2010년대 (8,000원)": 8000,
+    "2018년 (11,000원)": 11000,
+    "현재 기준 (15,000원)": 15000,
+}
+
+tc1, tc2, tc3, tc4 = st.columns(4)
+cols = [tc1, tc2, tc3, tc4]
+for idx, (year_label, price) in enumerate(prices.items()):
+    total_cost = price * num_people
+    cols[idx].metric(year_label, f"{total_cost:,}원", help=f"1인당 {price:,}원 기준")
+
+st.markdown("---")
+
+# --- 🏛️ [6] 대한민국 역대 영화 흥행 순위 ---
+st.subheader("🏛️ 대한민국 영화 역사상 역대 흥행 순위 (KOBIS 공식 집계)")
+
 all_time_data = [
     {"순위": 1, "영화명": "명량", "개봉연도": "2014년", "국가": "한국", "관객수(명)": 17616299, "비고": "역대 전체 1위"},
     {"순위": 2, "영화명": "극한직업", "개봉연도": "2019년", "국가": "한국", "관객수(명)": 16266480, "비고": "역대 코미디 1위"},
@@ -156,15 +217,6 @@ all_time_data = [
 
 df_alltime = pd.DataFrame(all_time_data)
 
-# 요약 하이라이트 지표 카드
-h1, h2, h3 = st.columns(3)
-h1.metric("👑 역대 1위 (전체)", "명량 (2014)", "1,761만 명")
-h2.metric("🌎 역대 외화 1위", "아바타 (2009)", "1,400만 명")
-h3.metric("🍿 천만 관객 영화 수", "총 33편+", "KOBIS 공식 통계")
-
-st.write("")
-
-# 탭 구성을 통한 세부 조회
 tab1, tab2, tab3 = st.tabs(["🏆 역대 통합 TOP 10", "🇰🇷 역대 한국영화 TOP 10", "🌎 역대 외화 TOP 5"])
 
 with tab1:
@@ -181,3 +233,13 @@ with tab2:
 with tab3:
     df_foreign = df_alltime[df_alltime["국가"] != "한국"].reset_index(drop=True)
     st.dataframe(df_foreign.style.format({"관객수(명)": "{:,}"}), use_container_width=True)
+
+st.markdown("---")
+
+# --- 🏆 [7] 숫자로 보는 영화판 레전드 기록 TMI ---
+st.subheader("🏆 [영화계 기네스북] 숫자로 보는 영화판 레전드 기록 TMI")
+g1, g2, g3, g4 = st.columns(4)
+g1.metric("⚡ 역대 하루 최다 관객", "1,665,653명", "명량 (2014.08.03)")
+g2.metric("🚀 개봉일 최다 관객", "1,340,824명", "어벤져스: 엔드게임 (2019)")
+g3.metric("⏱️ 최단기 천만 돌파", "12일 만에 달성", "명량 (2014)")
+g4.metric("📽️ 역대 최다 스크린 수", "2,835개", "어벤져스: 엔드게임 (2019)")
